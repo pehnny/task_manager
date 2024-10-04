@@ -1,20 +1,22 @@
+import { Status } from "./Status.js"
+
 type TTask =
 {
     message: string
-    status: boolean
+    status: Status
     buffer: string
 }
 
 export class Task implements TTask
 {
     message: string
-    status: boolean // TODO reimplement with enum Status
+    status: Status // TODO reimplement with enum Status
     buffer: string
 
     constructor(message: string)
     {
         this.message = message
-        this.status = false
+        this.status = Status.Ongoing
         this.buffer = message
     }
 
@@ -31,13 +33,15 @@ export class Task implements TTask
     updateStatus(): string
     {
         const strike = "\u0336"
-        this.status = !(this.status)
-
-        if (this.status) {
-            this.message = this.message.split("").map(char => strike + char).join("")
-        }
-        else {
-            this.message = this.message.split("").filter(char => char !== strike).join("")
+        switch (this.status) {
+            case Status.Ongoing:
+                this.status = Status.Done
+                this.message = this.message.split("").map(char => strike + char).join("")
+                break;
+            case Status.Done:
+                this.status = Status.Ongoing
+                this.message = this.message.split("").filter(char => char !== strike).join("")
+                break;
         }
 
         return this.buffer
