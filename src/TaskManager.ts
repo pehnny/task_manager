@@ -1,35 +1,42 @@
-import { sep } from "path";
-import { rl } from "./GUI.js";
+import { rl, saveFile } from "./global.js";
 import { Options } from "./Options.js";
 import { TaskList } from "./TaskList.js"
-import { readFileSync, writeFileSync } from "fs";
+import { readFileSync, writeFileSync, existsSync } from "fs";
+import { Task } from "./Task.js";
+import { YesOrNo } from "./YesOrNo.js";
 
 export class TaskManager
 {
     taskList: TaskList
 
-    private async askYesOrNo(message: string): Promise<string>
+    private async askYesOrNo(message: string): Promise<YesOrNo>
     {
-        const question = message + " yes or no ? "
+        const question = message + " yes or no : "
         let userInput = await rl.question(question)
         userInput = userInput.trim().toLowerCase()
 
-        if (!["yes", "no"].includes(userInput)) {
-            return this.askYesOrNo(message)
+        switch (userInput) {
+            case YesOrNo.Yes:
+            case YesOrNo.No:
+                break;
+            default:
+                rl.write("Wrong input !\n")
+                return this.askYesOrNo(message)
         }
-
+        
         return userInput
     }
 
     private displayOptions(): void
     {
-        const options = "1. to Create a new task\n"
-        + "2. to Read your task list\n"
-        + "3. to Update the status of a task\n"
-        + "4. to Selete a task\n"
-        + "5. to Exit the task manager\n"
+        const options = `=> ${Options.Create} : to Create a new task\n`
+        + `=> ${Options.Read} : to Read the task list\n`
+        + `=> ${Options.Update} : to Update the status of a task\n`
+        + `=> ${Options.Delete} : to Delete an existing task\n`
+        + `=> ${Options.Exit} : to Exit the task manager\n`
 
         rl.write(options)
+        this.displaySeparator()
     }
 
     private displaySeparator(): void
@@ -38,92 +45,88 @@ export class TaskManager
         rl.write(separator + "\n")
     }
 
-    private loadTaskList(): void
+    private async loadTaskList(): Promise<void>
     {
         // TODO load tasklist
-        // this.taskList = loadedTaskList
+        if (!existsSync(saveFile)) {
+            this.taskList = new TaskList()
+            return
+        }
+
+        const userInput = await this.askYesOrNo("Do you want to load your task list ?")
+
+        if (userInput === YesOrNo.No) {
+            this.taskList = new TaskList()
+            return
+        } 
+
+        const data = JSON.parse(readFileSync(saveFile).toString())
+        data.list = data.list.map(task => Task.from(task))
+        this.taskList = TaskList.from(data)
     }
 
-    private saveTaskList(): void
+    private async saveTaskList(): Promise<void>
     {
         // TODO save tasklist
+        const userInput = await this.askYesOrNo("Do you want to save your task list ?")
+
+        if (userInput === YesOrNo.Yes) {
+            writeFileSync(saveFile, JSON.stringify(this.taskList, null, 4))
+            rl.write("Saving your taskList....\n")
+        }
     }
 
     private async choseOption(): Promise<Options>
     {
-        this.displayOptions()
-        this.displaySeparator()
+        let userInput = await rl.question("Chose an action from the list above : ")
+        userInput = userInput.trim().toLocaleLowerCase()
 
-        const userInput = await rl.question("Chose an action number from the list above")
-        const userInputParser = parseInt(userInput)
-
-        switch (userInputParser) {
+        switch (userInput) {
             case Options.Create:
-                this.taskList.createTask()
-                return Options.Create
+                await this.taskList.createTask()
+                break;
             case Options.Read:
                 this.taskList.readTaskList()
-                return Options.Read
+                break;
             case Options.Update:
-                this.taskList.updateTask()
-                return Options.Update
+                await this.taskList.updateTaskStatus()
+                break;
             case Options.Delete:
-                this.taskList.deleteTask()
-                return Options.Delete
+                await this.taskList.deleteTask()
+                break;
             case Options.Exit:
-                return Options.Exit
+                break;
             default:
+                rl.write("Unknown action !\n")
                 return this.choseOption()
         }
+
+        this.displaySeparator()
+        return userInput
     }
 
     async run(): Promise<void>
     {
-        // TODO menu asking for user what to do
-        const CHOICES = "1. to see all your tasks\n"
-        + "2. to add a task\n"
-        + "3. to delete a task\n"
-        + "4. to mark a task as done\n"
-        + "5. to Exit the task manager"
-    const SEPARATOR = Array.from(new Array(40), () => "-").join("")
-
-    const TASKLIST = await this.loadTaskList()
-    console.log(SEPARATOR)
-    let userInput = ""
-    
-    console.log("Welcome to your task manager, Press: ")
-    while(userInput !== "5") {
-        console.log(CHOICES)
-        console.log(SEPARATOR)
-
-        userInput = await rl.question("Your choice: ")
-        console.log("")
-        // TODO reimplement with enum Options
-        switch (userInput) {
-            case "1":
-                await this.taskList.createTask()
-                break;
-            case "2":
-                await this.taskList.readTaskList()
-                break;
-            case "3":
-                await this.taskList.updateTask()
-                break;
-            case "4":
-                await this.taskList.deleteTask()
-                break;
-            case "5":
-                break;
-            default:
-                console.log("Unvalid key !")
-                break;
+        try {
+            await this.loadTaskList()
+        } catch (error) {
+            rl.write(error.message)
+            rl.close()
+            return
         }
 
-        console.log(SEPARATOR)
-    }
+        rl.write("Welcome to your task manager !\n")
+        this.displaySeparator()
+        this.displayOptions()
+        let userAction = await this.choseOption()
 
-    await this.saveTaskList()
-    console.log("Exiting task manager...")
-    rl.close()
+        while(userAction !== Options.Exit) {
+            this.displayOptions()
+            userAction = await this.choseOption()
+        }
+
+        await this.saveTaskList()
+        rl.write("Exiting task manager...\n")
+        rl.close()
     }
 }
