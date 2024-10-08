@@ -1,16 +1,16 @@
 import { rl } from "./global.js";
 import { Options } from "./Options.js";
-import { TaskList } from "./TaskList.js"
+import { TaskManagerActions } from "./TaskManagerActions.js"
 import * as MariaDB from "mariadb";
 import * as dotenv from "dotenv";
 
 export class TaskManager
 {
-    taskList: TaskList
+    actions: TaskManagerActions
     connection: MariaDB.Connection
 
     constructor() {
-        this.taskList = new TaskList()
+        this.actions = new TaskManagerActions()
     }
 
     private displayOptions(): void
@@ -19,6 +19,9 @@ export class TaskManager
         + `=> ${Options.Read} : to Read the task list\n`
         + `=> ${Options.Update} : to Update the status of a task\n`
         + `=> ${Options.Delete} : to Delete an existing task\n`
+        + `=> ${Options.Filter} : to Read the tasks with a specific status\n`
+        + `=> ${Options.Search} : to Search tasks containing a specific phrase\n`
+        + `=> ${Options.Priority} : to Read tasks ordered by priority and status\n`
         + `=> ${Options.Exit} : to Exit the task manager\n`
 
         rl.write(options)
@@ -55,6 +58,7 @@ export class TaskManager
             + "status varchar(50) NOT NULL DEFAULT 'pending',"
             + "created_at datetime NOT NULL DEFAULT current_timestamp(),"
             + "updated_at datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),"
+            + "priority TINYINT(1) NOT NULL DEFAULT '0',"
             + "PRIMARY KEY (id)"
             + ") ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=latin1 COLLATE=latin1_general_ci;"
         )
@@ -73,16 +77,25 @@ export class TaskManager
         switch (userInput) 
         {
             case Options.Create:
-                await this.taskList.createTask(this.connection)
+                await this.actions.createTask(this.connection)
                 break;
             case Options.Read:
-                await this.taskList.readTaskList(this.connection)
+                await this.actions.readTaskList(this.connection)
                 break;
             case Options.Update:
-                await this.taskList.updateTaskStatus(this.connection)
+                await this.actions.updateTaskStatus(this.connection)
                 break;
             case Options.Delete:
-                await this.taskList.deleteTask(this.connection)
+                await this.actions.deleteTask(this.connection)
+                break;
+            case Options.Filter:
+                await this.actions.filterTaskList(this.connection)
+                break;
+            case Options.Search:
+                await this.actions.searchByKeyword(this.connection)
+                break;
+            case Options.Priority:
+                await this.actions.readPrioritySortedTaskList(this.connection)
                 break;
             case Options.Exit:
                 break;

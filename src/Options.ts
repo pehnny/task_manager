@@ -4,6 +4,8 @@ export enum Options
     Read = "read",
     Update = "update",
     Delete = "delete",
-    Exit = "exit",
-    Repeat = ""
+    Filter = "filter",
+    Search = "search",
+    Priority = "priority",
+    Exit = "exit"
 }
