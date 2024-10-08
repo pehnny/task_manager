@@ -14,7 +14,8 @@ DB_HOST=localhost
 DB_USER=<your username>
 DB_PWD=<your user password>
 ```
-*remove the `<>` when you type your username and paswword of course ;)*
+*remove the `<>` when you type your username and paswword of course ;)* <br>
+**Make sure to not leak your id !!** (make sure your `.env` is ignored by git)
 ## Run
 ```sh
 npm start
