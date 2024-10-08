@@ -1,106 +1,90 @@
 import { rl } from "./global.js"
 import { Status } from "./Status.js"
-import { Task } from "./Task.js"
+import * as MariaDB from "mariadb";
 
-type TTaskList =
-{
-    name: string
-    user: string
-    list: Task[]
-}
-
-export class TaskList implements TTaskList
+export class TaskList
 {   
-    name: string
-    user: string
-    list: Task[]
-
-    constructor(name: string = "to do list", user: string = "anonymous")
+    private async choseTask(message: string, connection: MariaDB.Connection): Promise<number>
     {
-        this.name = name
-        this.user = user
-        this.list = []
-    }
-
-    static from(taskList: TTaskList): TaskList
-    {
-        const newTaskList = new TaskList()
-        newTaskList.name = taskList.name
-        newTaskList.user = taskList.user
-        newTaskList.list = taskList.list
-        return newTaskList
-    }
-
-    private async choseTask(message: string): Promise<number>
-    {
-        this.readTaskList()
         const userInput = await rl.question(message)
-        const taskNumber = parseInt(userInput) - 1
+        const id = parseInt(userInput)
+        const query = await connection.query("SELECT id FROM tasks")
+        const validIDs = query.map(task => task.id)
 
-        return new Promise(
+        return new Promise
+        (
             (resolve, reject) =>
             {
-                if (taskNumber < 0 || taskNumber >= this.list.length) {
-                    reject(new Error("Unknown task number !\n"))
+                if (!validIDs.includes(id))
+                {
+                    reject(new Error("Invalid ID !\n"))
                 }
-                resolve(taskNumber)
+
+                resolve(id)
             }
         )
     }
 
-    async createTask(): Promise<void>
+    async createTask(connection: MariaDB.Connection): Promise<void>
     {
-        // TODO mariaDB implementation
-        let userInput = await rl.question("Enter your task: ")
-        userInput = userInput.trim()
+        let newTask = await rl.question("Enter your task: ")
+        newTask = newTask.trim()
 
-        if (!userInput) {
+        if (!newTask)
+        {
             rl.write("Empty task forbidden !\n")
             return
         }
 
-        const newTask = new Task(userInput)
-        this.list.push(newTask)
-        rl.write("Task successfully created !\n")
+        const query = await connection.query("INSERT INTO tasks(description) VALUES (?)", [newTask])
+        rl.write("Task created !\n")
     }
 
-    readTaskList(): void
+    async readTaskList(connection: MariaDB.Connection): Promise<void>
     {
-        // TODO mariaDB implementation
-        if (this.list.length === 0) {
-            rl.write("Your list is empty !\n")
+        const query = await connection.query("SELECT id, description, status FROM tasks")
+
+        if (query.length < 1)
+        {
+            rl.write("You list is empty !\n")
             return
         }
 
-        for (const [taskNumber, task] of this.list.entries()) {
-            const {message, status} = task
-            rl.write(`${taskNumber+1}: ${message} [${status}]\n`)
+        for (const line of query)
+        {
+            const task = `${line.id} : ${line.description} [${line.status}]\n`
+            rl.write(task)
         }
     }
 
-    async updateTaskStatus(): Promise<void>
+    async updateTaskStatus(connection: MariaDB.Connection): Promise<void>
     {
         // TODO mariaDB implementation
-        let taskNumber: number
+        let id: number
 
-        try {
-            taskNumber = await this.choseTask("Enter the number of the task you want to update : ")
-        } catch (error) {
+        try 
+        {
+            await this.readTaskList(connection)
+            const question = "Enter the id of the task you want to update : "
+            id = await this.choseTask(question, connection)
+        } 
+        catch (error) 
+        {
             rl.write(error.message)
             return
         }
 
-        const task = this.list[taskNumber]
-
-        for (const status of Object.values(Status)) {
+        for (const status of Object.values(Status))
+        {
             rl.write("=> " + status + "\n")
         }
 
         let newStatus = await rl.question("Chose the status you want to apply to your task : ")
         newStatus = newStatus.trim().toLocaleLowerCase()
         
-        switch (newStatus) {
-            case Status.Ongoing:
+        switch (newStatus) 
+        {
+            case Status.Pending:
             case Status.Done:
                 break;
             default:
@@ -108,22 +92,28 @@ export class TaskList implements TTaskList
                 return
         }
         
-        task.updateStatus(newStatus)
+        const query = await connection.query("UPDATE tasks SET status = ? WHERE id = ?", [newStatus, id])
+        rl.write("Task updated !\n")
     }
 
-    async deleteTask(): Promise<void>
+    async deleteTask(connection: MariaDB.Connection): Promise<void>
     {
         // TODO mariaDB implementation
-        let taskNumber: number
+        let id: number
 
-        try {
-            taskNumber = await this.choseTask("Enter the number of the task you want to delete : ")
-        } catch (error) {
+        try 
+        {
+            await this.readTaskList(connection)
+            const question = "Enter the id of the task you want to delete : "
+            id = await this.choseTask(question, connection)
+        } 
+        catch (error) 
+        {
             rl.write(error.message)
             return
         }
 
-        const deletedTask = this.list.splice(taskNumber, 1)[0]
-        rl.write(`${deletedTask.message} successfully deleted !\n`)
+        const query = await connection.query("DELETE FROM tasks WHERE id = ?", [id])
+        rl.write("Task deleted !\n")
     }
 }

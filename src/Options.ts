@@ -4,5 +4,6 @@ export enum Options
     Read = "read",
     Update = "update",
     Delete = "delete",
-    Exit = "exit"
+    Exit = "exit",
+    Repeat = ""
 }

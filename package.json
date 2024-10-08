@@ -5,13 +5,15 @@
     "main": "08-01-task-manager.js",
     "scripts": {
         "postinstall": "npx tsc",
-        "prestart": "mkdirp -p ./target && mkdirp -p ./saves",
+        "prestart": "mkdirp -p ./target",
         "start": "node ./target/app.js"
     },
     "author": "Théo Piron",
     "license": "ISC",
     "devDependencies": {
         "@types/node": "^22.7.4",
+        "dotenv": "^16.4.5",
+        "mariadb": "^3.3.2",
         "mkdirp": "^3.0.1",
         "typescript": "^5.6.2"
     },

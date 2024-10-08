@@ -11,7 +11,7 @@ export class Task implements TTask
     message: string
     status: Status
 
-    constructor(message: string, status: Status = Status.Ongoing)
+    constructor(message: string, status: Status = Status.Pending)
     {
         this.message = message
         this.status = status

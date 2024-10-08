@@ -1,30 +1,16 @@
-import { rl, saveFile } from "./global.js";
+import { rl } from "./global.js";
 import { Options } from "./Options.js";
 import { TaskList } from "./TaskList.js"
-import { readFileSync, writeFileSync, existsSync } from "fs";
-import { Task } from "./Task.js";
-import { YesOrNo } from "./YesOrNo.js";
+import * as MariaDB from "mariadb";
+import * as dotenv from "dotenv";
 
 export class TaskManager
 {
     taskList: TaskList
+    connection: MariaDB.Connection
 
-    private async askYesOrNo(message: string): Promise<YesOrNo>
-    {
-        const question = message + " yes or no : "
-        let userInput = await rl.question(question)
-        userInput = userInput.trim().toLowerCase()
-
-        switch (userInput) {
-            case YesOrNo.Yes:
-            case YesOrNo.No:
-                break;
-            default:
-                rl.write("Wrong input !\n")
-                return this.askYesOrNo(message)
-        }
-        
-        return userInput
+    constructor() {
+        this.taskList = new TaskList()
     }
 
     private displayOptions(): void
@@ -45,35 +31,38 @@ export class TaskManager
         rl.write(separator + "\n")
     }
 
-    private async loadTaskList(): Promise<void>
+    private async connect(): Promise<MariaDB.Connection>
     {
-        // TODO load tasklist
-        if (!existsSync(saveFile)) {
-            this.taskList = new TaskList()
-            return
-        }
-
-        const userInput = await this.askYesOrNo("Do you want to load your task list ?")
-
-        if (userInput === YesOrNo.No) {
-            this.taskList = new TaskList()
-            return
-        } 
-
-        const data = JSON.parse(readFileSync(saveFile).toString())
-        data.list = data.list.map(task => Task.from(task))
-        this.taskList = TaskList.from(data)
+        return MariaDB.createConnection
+        (
+            {
+                host: process.env.DB_HOST,
+                user: process.env.DB_USER,
+                password: process.env.DB_PWD
+            }
+        )
     }
 
-    private async saveTaskList(): Promise<void>
+    private async initDatabase(): Promise<any>
     {
-        // TODO save tasklist
-        const userInput = await this.askYesOrNo("Do you want to save your task list ?")
+        await this.connection.query("CREATE DATABASE IF NOT EXISTS task_manager;")
+        await this.connection.query("USE task_manager;")
+        await this.connection.query
+        (
+            "CREATE TABLE IF NOT EXISTS tasks ("
+            + "id int(10) unsigned NOT NULL AUTO_INCREMENT,"
+            + "description varchar(100) NOT NULL,"
+            + "status varchar(50) NOT NULL DEFAULT 'pending',"
+            + "created_at datetime NOT NULL DEFAULT current_timestamp(),"
+            + "updated_at datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),"
+            + "PRIMARY KEY (id)"
+            + ") ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=latin1 COLLATE=latin1_general_ci;"
+        )
+    }
 
-        if (userInput === YesOrNo.Yes) {
-            writeFileSync(saveFile, JSON.stringify(this.taskList, null, 4))
-            rl.write("Saving your taskList....\n")
-        }
+    private async closeDatabase(): Promise<void>
+    {
+        await this.connection.end()
     }
 
     private async choseOption(): Promise<Options>
@@ -81,23 +70,26 @@ export class TaskManager
         let userInput = await rl.question("Chose an action from the list above : ")
         userInput = userInput.trim().toLocaleLowerCase()
 
-        switch (userInput) {
+        switch (userInput) 
+        {
             case Options.Create:
-                await this.taskList.createTask()
+                await this.taskList.createTask(this.connection)
                 break;
             case Options.Read:
-                this.taskList.readTaskList()
+                await this.taskList.readTaskList(this.connection)
                 break;
             case Options.Update:
-                await this.taskList.updateTaskStatus()
+                await this.taskList.updateTaskStatus(this.connection)
                 break;
             case Options.Delete:
-                await this.taskList.deleteTask()
+                await this.taskList.deleteTask(this.connection)
                 break;
             case Options.Exit:
                 break;
             default:
-                rl.write("Unknown action !\n")
+                rl.write("Unknown option !\n")
+                this.displaySeparator()
+                this.displayOptions()
                 return this.choseOption()
         }
 
@@ -107,26 +99,52 @@ export class TaskManager
 
     async run(): Promise<void>
     {
-        try {
-            await this.loadTaskList()
-        } catch (error) {
-            rl.write(error.message)
-            rl.close()
+        dotenv.config()
+
+        try
+        {
+            this.connection = await this.connect()
+            rl.write("Connected to localhost !\n")
+        }
+        catch (error)
+        {
+            rl.write(error.message + "\n")
+            return
+        }
+
+        try 
+        {
+            await this.initDatabase()
+            rl.write("Using task_manager database !\n")
+        } 
+        catch (error) 
+        {
+            rl.write(error.message + "\n")
             return
         }
 
         rl.write("Welcome to your task manager !\n")
+        rl.write("To interact with your list, enter an option from the list below.\n")
         this.displaySeparator()
         this.displayOptions()
         let userAction = await this.choseOption()
 
-        while(userAction !== Options.Exit) {
+        while (userAction !== Options.Exit) 
+        {
             this.displayOptions()
             userAction = await this.choseOption()
         }
 
-        await this.saveTaskList()
+        try 
+        {
+            await this.closeDatabase()
+        } 
+        catch (error) 
+        {
+            rl.write(error.message + "\n")
+            return
+        }
+
         rl.write("Exiting task manager...\n")
-        rl.close()
     }
 }
