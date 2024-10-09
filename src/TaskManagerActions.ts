@@ -1,8 +1,8 @@
 import { rl } from "./global.js"
 import { Status } from "./Status.js"
-import * as MariaDB from "mariadb";
 import { Task } from "./Task.js";
 import { YesOrNo } from "./YesOrNo.js";
+import { Op, Sequelize } from "sequelize";
 
 export class TaskManagerActions
 {
@@ -22,12 +22,14 @@ export class TaskManagerActions
         }
     }
 
-    private async choseTask(message: string, connection: MariaDB.Connection): Promise<number>
+    private async choseTask(message: string): Promise<number>
     {
         const userInput = await rl.question(message)
         const id = parseInt(userInput)
-        const query = await connection.query("SELECT id FROM tasks")
-        const validIDs = query.map(task => task.id)
+        
+        const attributes = ["id"]
+        const tasks = await Task.findAll({attributes})
+        const validIDs = tasks.map(task => task.id)
 
         return new Promise
         (
@@ -47,22 +49,22 @@ export class TaskManagerActions
     {
         let formatedTask = ""
 
-        if ("id" in task)
+        if (task.id !== undefined)
         {
             formatedTask += `${task.id} `
         }
 
-        if ("description" in task)
+        if (task.description !== undefined)
         {
             formatedTask += `: ${task.description} `
         }
 
-        if ("status" in task)
+        if (task.status !== undefined)
         {
             formatedTask += `[${task.status}] `
         }
 
-        if ("priority" in task)
+        if (task.priority !== undefined)
         {
             const priority = task.priority
 
@@ -80,7 +82,7 @@ export class TaskManagerActions
         return formatedTask + "\n"
     }
 
-    private displayTasks(query: Array<Task>): void
+    private displayTasks(query: Task[]): void
     {
         if (query.length < 1)
         {
@@ -95,52 +97,50 @@ export class TaskManagerActions
         }
     }
 
-    async createTask(connection: MariaDB.Connection): Promise<void>
+    async createTask(): Promise<void>
     {
-        let newTask = await rl.question("Enter your task: ")
-        newTask = newTask.trim()
+        let description = await rl.question("Enter your task: ")
+        description = description.trim()
 
-        if (!newTask)
+        if (!description)
         {
             rl.write("Empty task forbidden !\n")
             return
         }
 
-        const priority = await this.askYesOrNo("Do you want to prioritize this task ?")
-        let taskPriority: number
+        const userInput = await this.askYesOrNo("Do you want to prioritize this task ?")
+        let priority: number
 
-        switch (priority)
+        switch (userInput)
         {
             case YesOrNo.Yes:
-                taskPriority = 1
+                priority = 1
                 break;
             case YesOrNo.No:
-                taskPriority = 0
+                priority = 0
                 break;
         }
 
-        rl.write(taskPriority.toString() + "\n")
-
-        const query = await connection.query("INSERT INTO tasks(description, priority) VALUES (?, ?)", [newTask, taskPriority])
+        const newTask = await Task.create({description, priority}) 
         rl.write("Task created !\n")
     }
 
-    async readTaskList(connection: MariaDB.Connection): Promise<void>
+    async readTaskList(): Promise<void>
     {
-        const query = await connection.query("SELECT id, description, status, priority FROM tasks")
-        this.displayTasks(query)
+        const attributes = ["id", "description", "status", "priority"]
+        const tasks = await Task.findAll({attributes})
+        this.displayTasks(tasks)
     }
 
-    async updateTaskStatus(connection: MariaDB.Connection): Promise<void>
+    async updateTaskStatus(): Promise<void>
     {
-        // TODO mariaDB implementation
         let id: number
 
         try 
         {
-            await this.readTaskList(connection)
+            await this.readTaskList()
             const question = "Enter the id of the task you want to update : "
-            id = await this.choseTask(question, connection)
+            id = await this.choseTask(question)
         } 
         catch (error) 
         {
@@ -153,10 +153,10 @@ export class TaskManagerActions
             rl.write("=> " + status + "\n")
         }
 
-        let newStatus = await rl.question("Chose the status you want to apply to your task : ")
-        newStatus = newStatus.trim().toLowerCase()
+        let status = await rl.question("Chose the status you want to apply to your task : ")
+        status = status.trim().toLowerCase()
         
-        switch (newStatus) 
+        switch (status) 
         {
             case Status.Pending:
             case Status.Done:
@@ -166,20 +166,20 @@ export class TaskManagerActions
                 return
         }
         
-        const query = await connection.query("UPDATE tasks SET status = ? WHERE id = ?", [newStatus, id])
+        const where = {id}
+        const affected = await Task.update({status}, {where})
         rl.write("Task updated !\n")
     }
 
-    async deleteTask(connection: MariaDB.Connection): Promise<void>
+    async deleteTask(): Promise<void>
     {
-        // TODO mariaDB implementation
         let id: number
 
         try 
         {
-            await this.readTaskList(connection)
+            await this.readTaskList()
             const question = "Enter the id of the task you want to delete : "
-            id = await this.choseTask(question, connection)
+            id = await this.choseTask(question)
         } 
         catch (error) 
         {
@@ -187,11 +187,12 @@ export class TaskManagerActions
             return
         }
 
-        const query = await connection.query("DELETE FROM tasks WHERE id = ?", [id])
+        const where = {id}
+        const row = await Task.destroy({where})
         rl.write("Task deleted !\n")
     }
 
-    async filterTaskList(connection: MariaDB.Connection): Promise<void> 
+    async filterTaskList(): Promise<void> 
     {
         for (const status of Object.values(Status))
         {
@@ -211,31 +212,30 @@ export class TaskManagerActions
                 return
         }
 
-        const query = await connection.query("SELECT id, description, priority FROM tasks WHERE status = ?", [status])
-        this.displayTasks(query)
+        const attributes = ["id", "description", "priority"]
+        const where = {status}
+        const tasks = await Task.findAll({attributes, where})
+        this.displayTasks(tasks)
     }
 
-    async searchByKeyword(connection: MariaDB.Connection): Promise<void>
+    async searchByKeyword(): Promise<void>
     {
         let keyword = await rl.question("Enter a keyword to search for specific tasks : ")
-        keyword = keyword.trim().toLowerCase()
+        keyword = keyword.trim()
         keyword = `%${keyword}%`
 
-        const query = await connection.query("SELECT id, description, status, priority FROM tasks WHERE description LIKE ?", [keyword])
-        this.displayTasks(query)
+        const attributes = ["id", "description", "status", "priority"]
+        const description = {[Op.like]: keyword}
+        const where = {description}
+        const tasks = await Task.findAll({attributes, where})
+        this.displayTasks(tasks)
     }
 
-    async readPrioritySortedTaskList(connection: MariaDB.Connection): Promise<void>
+    async readPrioritySortedTaskList(): Promise<void>
     {
-        const query = await connection.query
-        (
-            "SELECT id, description, status, priority FROM tasks "
-            + "ORDER BY priority DESC, "
-            + `CASE status WHEN '${Status.Pending}' THEN 0 WHEN '${Status.Done}' THEN 1 END,`
-            + "status DESC,"
-            + "id ASC;"
-        )
-
-        this.displayTasks(query)
+        const attributes = ["id", "description", "status", "priority"]
+        const statusOrder = Sequelize.literal(`CASE status WHEN '${Status.Pending}' THEN 0 WHEN '${Status.Done}' THEN 1 END, status`)
+        const tasks = await Task.findAll({attributes, order: [["priority", "DESC"], [statusOrder, "DESC"], ["id", "ASC"]]})
+        this.displayTasks(tasks)
     }
 }

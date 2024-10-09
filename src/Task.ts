@@ -1,11 +1,12 @@
+import { Model } from "sequelize"
 import { Status } from "./Status.js"
 
-export type Task =
+export class Task extends Model
 {
-    id: number
-    description: string
-    status: Status
-    created_at: Date
-    updated_at: Date
-    priority: number
+    declare id: number
+    declare description: string
+    declare status: Status
+    declare created_at: Date
+    declare updated_at: Date
+    declare priority: number
 }

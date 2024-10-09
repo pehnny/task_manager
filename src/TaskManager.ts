@@ -1,13 +1,14 @@
 import { rl } from "./global.js";
 import { Options } from "./Options.js";
-import { TaskManagerActions } from "./TaskManagerActions.js"
-import * as MariaDB from "mariadb";
+import { TaskManagerActions } from "./TaskManagerActions.js";
 import * as dotenv from "dotenv";
+import { DataTypes, Sequelize } from "sequelize";
+import { Task } from "./Task.js";
 
 export class TaskManager
 {
     actions: TaskManagerActions
-    connection: MariaDB.Connection
+    connection: Sequelize
 
     constructor() {
         this.actions = new TaskManagerActions()
@@ -34,39 +35,57 @@ export class TaskManager
         rl.write(separator + "\n")
     }
 
-    private async connect(): Promise<MariaDB.Connection>
+    private connect(): Sequelize
     {
-        return MariaDB.createConnection
-        (
-            {
-                host: process.env.DB_HOST,
-                user: process.env.DB_USER,
-                password: process.env.DB_PWD
-            }
-        )
+        const db = "task_manager"
+        const user = new String(process.env.DB_USER).toString()
+        const pwd = process.env.DB_PWD
+        return new Sequelize(db, user, pwd, {host: "localhost", dialect: "mariadb", "timezone": "+02:00"})
     }
 
-    private async initDatabase(): Promise<any>
+    private initDatabase(): void
     {
-        await this.connection.query("CREATE DATABASE IF NOT EXISTS task_manager;")
-        await this.connection.query("USE task_manager;")
-        await this.connection.query
+        Task.init
         (
-            "CREATE TABLE IF NOT EXISTS tasks ("
-            + "id int(10) unsigned NOT NULL AUTO_INCREMENT,"
-            + "description varchar(100) NOT NULL,"
-            + "status varchar(50) NOT NULL DEFAULT 'pending',"
-            + "created_at datetime NOT NULL DEFAULT current_timestamp(),"
-            + "updated_at datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),"
-            + "priority TINYINT(1) NOT NULL DEFAULT '0',"
-            + "PRIMARY KEY (id)"
-            + ") ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=latin1 COLLATE=latin1_general_ci;"
+            {
+                "id":
+                {
+                    "type": DataTypes.INTEGER,
+                    "autoIncrement": true,
+                    "primaryKey": true
+                },
+                "description":
+                {
+                    "type": DataTypes.STRING,
+                    "allowNull": false
+                },
+                "status":
+                {
+                    "type": DataTypes.STRING,
+                    "allowNull": false,
+                    "defaultValue": "pending"
+                },
+                "priority":
+                {
+                    "type": DataTypes.TINYINT,
+                    "allowNull": false,
+                    "defaultValue": 0
+                }
+            },
+            {
+                "sequelize": this.connection,
+                "modelName": "Task",
+                "charset": "latin1 COLLATE=latin1_general_ci",
+                "engine": "InnoDB",
+                "createdAt": "created_at",
+                "updatedAt": "updated_at",
+            }
         )
     }
 
     private async closeDatabase(): Promise<void>
     {
-        await this.connection.end()
+        await this.connection.close()
     }
 
     private async choseOption(): Promise<Options>
@@ -77,25 +96,25 @@ export class TaskManager
         switch (userInput) 
         {
             case Options.Create:
-                await this.actions.createTask(this.connection)
+                await this.actions.createTask()
                 break;
             case Options.Read:
-                await this.actions.readTaskList(this.connection)
+                await this.actions.readTaskList()
                 break;
             case Options.Update:
-                await this.actions.updateTaskStatus(this.connection)
+                await this.actions.updateTaskStatus()
                 break;
             case Options.Delete:
-                await this.actions.deleteTask(this.connection)
+                await this.actions.deleteTask()
                 break;
             case Options.Filter:
-                await this.actions.filterTaskList(this.connection)
+                await this.actions.filterTaskList()
                 break;
             case Options.Search:
-                await this.actions.searchByKeyword(this.connection)
+                await this.actions.searchByKeyword()
                 break;
             case Options.Priority:
-                await this.actions.readPrioritySortedTaskList(this.connection)
+                await this.actions.readPrioritySortedTaskList()
                 break;
             case Options.Exit:
                 break;
@@ -116,7 +135,8 @@ export class TaskManager
 
         try
         {
-            this.connection = await this.connect()
+            this.connection = this.connect()
+            this.connection.authenticate()
             rl.write("Connected to localhost !\n")
         }
         catch (error)
