@@ -15,7 +15,8 @@
         "dotenv": "^16.4.5",
         "mariadb": "^3.3.2",
         "mkdirp": "^3.0.1",
-        "typescript": "^5.6.2"
+        "sequelize": "^6.37.4",
+        "typescript": "^5.6.3"
     },
     "type": "module"
 }
